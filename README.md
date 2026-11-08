@@ -1,6 +1,6 @@
 # westering
 
-A cattle prod for stalled agents. It escalates in stages when an agent stalls: a nudge, a sharper prompt, a smaller subtask, a fork of the work, and only then a kill.
+An offline policy lab for a graded stall rescue ladder. It reads recorded traces of agent work, detects looping and fixation stalls, and replays scripted scenarios against the ladder, recording which rung clears the stall.
 
 Westering is a command line tool that reads recorded traces of agent work and rescues stalls in a local sandbox. Its detectors catch two failure shapes, looping and tool fixation, and name the evidence span for each catch. A graded ladder then intervenes in a fixed order, a nudge, a sharper prompt, a smaller subtask, and a fork, and every rescue is recorded as one timeline that shows each rung tried and the rung that worked. Nothing here touches a live fleet.
 
