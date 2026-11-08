@@ -165,7 +165,7 @@ Every command reads only the files it is handed. A trace or fixture file that is
 
 ## Status
 
-The detectors, the four rung ladder, and the recorded fixture seam are built and tested, and every run happens against scripted agents in a local sandbox. The kill rung is not built here and never will be, because that rung belongs to arvin. Closed rounds 7 of 100. Part of the impatient programming portfolio, in the Fleet Operations arc.
+The detectors, the four rung ladder, and the recorded fixture seam are built and tested, and every run happens against scripted agents in a local sandbox. The kill rung is not built here and never will be, because that rung belongs to arvin. Round 8 landed in PR 19, repositioning the repo as the offline policy lab it is built as. Closed rounds 8 of 100. Part of the impatient programming portfolio, in the Fleet Operations arc.
 
 ## License
 
