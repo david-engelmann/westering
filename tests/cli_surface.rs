@@ -27,6 +27,12 @@
 //! session, whose record gains the fork intervention under
 //! PR-46. Every other case stands byte for byte as the Round 5
 //! tree left it.
+//!
+//! Round 9 addition. One case was added under PR-63,
+//! intervene-help-short, firing the help short behind intervene
+//! in the direct position, and no standing case changed its
+//! expectation or its side, so the counts below move by that
+//! one case alone.
 
 mod common;
 
@@ -36,9 +42,9 @@ use std::path::{Path, PathBuf};
 use common::{run_cli, temp_dir};
 use westering::pyjson::{self, Value};
 
-const EXPECTED_CASES: usize = 82;
+const EXPECTED_CASES: usize = 83;
 const EXPECTED_ORACLE_CASES: usize = 32;
-const EXPECTED_CLAP_CASES: usize = 50;
+const EXPECTED_CLAP_CASES: usize = 51;
 
 fn string(value: &Value) -> &str {
     value.as_str().expect("corpus text is a string")

@@ -378,6 +378,18 @@ enum Preprocess {
     FireHelp(Option<String>),
 }
 
+/// The long flags the walk reads help tokens against on the
+/// root, held by hand at the one help long.
+///
+/// The root command declares no long but --help, so the hand set
+/// holds that long alone. The set stands in one named place so
+/// the guard pin in the unit tests below reads the same
+/// construction the walk reads, and the contract states the pin
+/// that proves the hand set and the derived set equal.
+fn root_longs() -> Vec<String> {
+    vec!["--help".to_string()]
+}
+
 /// Walk the arguments the way the Python parser's scan walked
 /// them and prepare them for clap.
 ///
@@ -404,7 +416,7 @@ enum Preprocess {
 /// argument in its own voice.
 fn preprocess(tokens: &[OsString]) -> Preprocess {
     let specs = subcommand_specs();
-    let root_longs: Vec<String> = vec!["--help".to_string()];
+    let root_longs = root_longs();
     let mut out: Vec<OsString> = Vec::new();
     let mut current: Option<usize> = None;
     let mut pending: Option<String> = None;
@@ -580,5 +592,84 @@ fn run() -> ExitCode {
             eprintln!("error: {}", error);
             ExitCode::from(refusal_status(&error))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Derive the root long set from the built command in the
+    /// same manner subcommand_specs derives the long set of a
+    /// subcommand, collecting the long of every argument the root
+    /// command carries and completing the set with the help long
+    /// where it stands absent.
+    fn derived_root_longs() -> Vec<String> {
+        let mut command = Cli::command();
+        command.build();
+        let mut longs: Vec<String> = Vec::new();
+        for arg in command.get_arguments() {
+            let Some(long) = arg.get_long() else {
+                continue;
+            };
+            let name = format!("--{}", long);
+            if !longs.contains(&name) {
+                longs.push(name);
+            }
+        }
+        if !longs.iter().any(|long| long == "--help") {
+            longs.push("--help".to_string());
+        }
+        longs
+    }
+
+    /// The root command declares no long but --help, and the hand
+    /// set the walk reads on the root holds that long alone. A
+    /// long added to the root command breaks the first assertion,
+    /// and an edit to the hand set alone breaks the second, so
+    /// neither change leaves the hand set standing behind the
+    /// parser in silence. The derivation completes the set with
+    /// the help long where it stands absent, so the guard runs
+    /// one way and the help long's own presence on the root stands
+    /// pinned by the corpus help cases rather than by this pin.
+    #[test]
+    fn root_long_set_is_the_one_help_long() {
+        let derived = derived_root_longs();
+        assert_eq!(derived, vec!["--help".to_string()]);
+        assert_eq!(root_longs(), derived);
+    }
+
+    /// Collect the help short of every command in the tree,
+    /// walking the root command and every subcommand in turn and
+    /// finding on each the argument whose long is the help long.
+    fn collect_help_shorts(command: &clap::Command, shorts: &mut Vec<Option<char>>) {
+        for arg in command.get_arguments() {
+            if arg.get_long() == Some("help") {
+                shorts.push(arg.get_short());
+            }
+        }
+        for subcommand in command.get_subcommands() {
+            collect_help_shorts(subcommand, shorts);
+        }
+    }
+
+    /// The two reads of the walk test the second character of a
+    /// token against the letter h in every context they reach,
+    /// because the help argument of every command in the tree
+    /// carries the short h. A help short customized to another
+    /// letter on any command breaks this pin, and a command
+    /// carrying no help argument breaks it, so neither change
+    /// leaves the reads standing behind the parser in silence.
+    #[test]
+    fn help_short_of_every_command_is_h() {
+        let mut command = Cli::command();
+        command.build();
+        let mut shorts: Vec<Option<char>> = Vec::new();
+        collect_help_shorts(&command, &mut shorts);
+        assert_eq!(shorts.len(), 3, "the count of the commands in the tree");
+        assert!(
+            shorts.iter().all(|short| *short == Some('h')),
+            "every help short is the letter h, got {shorts:?}"
+        );
     }
 }
