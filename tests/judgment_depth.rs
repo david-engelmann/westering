@@ -102,9 +102,10 @@ fn player_refuses_the_fixture_one_container_past_the_ceiling() {
             "the refusal is the nested too deeply kind, got {}",
             err
         );
+        let joined = dir.join("deep.json");
         assert!(
-            err.to_string().contains("deep.json"),
-            "the refusal names the fixture, got {}",
+            err.to_string().contains(&joined.display().to_string()),
+            "the refusal names the fixture at its joined path, got {}",
             err
         );
         std::fs::remove_dir_all(&dir).ok();
