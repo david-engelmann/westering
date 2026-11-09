@@ -643,11 +643,11 @@ mod tests {
     /// walking the root command and every subcommand in turn and
     /// finding on each the argument whose long is the help long.
     fn collect_help_shorts(command: &clap::Command, shorts: &mut Vec<Option<char>>) {
-        for arg in command.get_arguments() {
-            if arg.get_long() == Some("help") {
-                shorts.push(arg.get_short());
-            }
-        }
+        let arg = command
+            .get_arguments()
+            .find(|arg| arg.get_long() == Some("help"))
+            .expect("every command must have a --help argument");
+        shorts.push(arg.get_short());
         for subcommand in command.get_subcommands() {
             collect_help_shorts(subcommand, shorts);
         }
