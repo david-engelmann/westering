@@ -672,4 +672,609 @@ mod tests {
             "every help short is the letter h, got {shorts:?}"
         );
     }
+
+    /// Run the walk over a token stream and answer the token
+    /// list it hands to clap, in text form. A stream on which
+    /// help fires fails here instead of answering, so a pin
+    /// expecting a run reads a fired help as a failure.
+    fn walk_run(tokens: &[&str]) -> Vec<String> {
+        let owned: Vec<OsString> = tokens.iter().map(OsString::from).collect();
+        match preprocess(&owned) {
+            Preprocess::Run(out) => out
+                .iter()
+                .map(|token| token.to_string_lossy().into_owned())
+                .collect(),
+            Preprocess::FireHelp(name) => {
+                panic!("expected a run and the walk fired help for {name:?}")
+            }
+        }
+    }
+
+    /// Run the walk over a token stream and answer the name of
+    /// the parser whose help it fires, or no name for the root.
+    /// A stream the walk hands to clap fails here instead.
+    fn walk_fires(tokens: &[&str]) -> Option<String> {
+        let owned: Vec<OsString> = tokens.iter().map(OsString::from).collect();
+        match preprocess(&owned) {
+            Preprocess::FireHelp(name) => name,
+            Preprocess::Run(out) => {
+                panic!("expected fired help and the walk ran {out:?}")
+            }
+        }
+    }
+
+    /// Assert the walk hands the expected token list to clap.
+    fn expect_run(tokens: &[&str], expected: &[&str]) {
+        let expected: Vec<String> = expected.iter().map(|item| item.to_string()).collect();
+        assert_eq!(walk_run(tokens), expected);
+    }
+
+    /// Assert the walk fires the help of the expected parser,
+    /// or of the root when the name is absent.
+    fn expect_fires(tokens: &[&str], expected: Option<&str>) {
+        assert_eq!(walk_fires(tokens).as_deref(), expected);
+    }
+
+    /// A subcommand word at the root selects that subcommand's
+    /// tables, so a help token behind it fires that parser's
+    /// help under its name and never the root's.
+    #[test]
+    fn walk_recognizes_a_subcommand_and_reads_its_tables() {
+        expect_fires(
+            &["intervene", "--scenario=loop-clears-on-nudge", "--help"],
+            Some("intervene"),
+        );
+    }
+
+    /// A root word naming no subcommand reads as a positional
+    /// and blocks the walk, so the subcommand word and the help
+    /// token behind it pass through untouched.
+    #[test]
+    fn walk_blocks_on_a_root_word_that_names_no_subcommand() {
+        expect_run(&["word", "detect", "--help"], &["word", "detect", "--help"]);
+    }
+
+    /// A root token shaped as an option blocks nothing, so the
+    /// walk still recognizes the subcommand behind it and joins
+    /// the value behind that.
+    #[test]
+    fn walk_passes_a_root_option_token_without_blocking() {
+        expect_run(
+            &["--bogus", "detect", "--trace", "trace.json"],
+            &["--bogus", "detect", "--trace=trace.json"],
+        );
+    }
+
+    /// Recognition is by the whole word, so an abbreviated
+    /// subcommand word reads as a positional and blocks, and
+    /// the help token behind it never fires.
+    #[test]
+    fn walk_blocks_on_an_abbreviated_subcommand_word() {
+        expect_run(&["det", "--help"], &["det", "--help"]);
+    }
+
+    /// The long help spelling at the root fires the root help.
+    #[test]
+    fn walk_fires_root_help_on_the_long_spelling() {
+        expect_fires(&["--help"], None);
+    }
+
+    /// An abbreviated long naming the one root long uniquely
+    /// fires the root help, as the Python parser's scan fires
+    /// an unambiguous abbreviation.
+    #[test]
+    fn walk_fires_root_help_on_an_abbreviated_long() {
+        expect_fires(&["--he"], None);
+    }
+
+    /// The shortest abbreviation of the help long still names
+    /// it uniquely on the root and fires.
+    #[test]
+    fn walk_fires_root_help_on_the_shortest_abbreviation() {
+        expect_fires(&["--h"], None);
+    }
+
+    /// A help long carrying an explicit value is refused, the
+    /// token carried as written and the walk handing it to clap.
+    #[test]
+    fn walk_refuses_root_help_carrying_a_value() {
+        expect_run(&["--help=x"], &["--help=x"]);
+    }
+
+    /// The refusal of a valued help token runs on the
+    /// abbreviated spelling the same way, and the block it
+    /// sets keeps the help token behind it from firing.
+    #[test]
+    fn walk_refuses_an_abbreviated_help_carrying_a_value() {
+        expect_run(&["--h=x", "--help"], &["--h=x", "--help"]);
+    }
+
+    /// The short help spelling at the root fires the root help.
+    #[test]
+    fn walk_fires_root_help_on_the_short_spelling() {
+        expect_fires(&["-h"], None);
+    }
+
+    /// A short bundle continuing past the h with a letter fires
+    /// as the short help spelling does.
+    #[test]
+    fn walk_fires_root_help_on_a_short_bundle() {
+        expect_fires(&["-hx"], None);
+    }
+
+    /// A short help token carrying a value after an equals sign
+    /// is refused, and the walk carries it in the long form
+    /// clap refuses in its own voice, and the block it sets
+    /// keeps the help token behind it from firing.
+    #[test]
+    fn walk_refuses_short_help_with_an_equals_value() {
+        expect_run(&["-h=x", "--help"], &["--help=x", "--help"]);
+    }
+
+    /// A short help token continuing with a dash reads as a
+    /// help token carrying a value and is refused in the same
+    /// carried form, under the same block.
+    #[test]
+    fn walk_refuses_short_help_with_a_dash_value() {
+        expect_run(&["-h-x", "--help"], &["--help=-x", "--help"]);
+    }
+
+    /// A long token extending past the help long names no long
+    /// on the root and reads as no help, and it blocks nothing,
+    /// so the subcommand behind it is still recognized.
+    #[test]
+    fn walk_reads_no_help_in_a_longer_long_token() {
+        expect_fires(&["--helpme", "detect", "--help"], Some("detect"));
+    }
+
+    /// Help at the root fires where the scan reaches it, ahead
+    /// of a subcommand word standing later in the stream.
+    #[test]
+    fn walk_fires_root_help_before_any_subcommand() {
+        expect_fires(&["-h", "detect"], None);
+    }
+
+    /// The long help spelling behind detect fires the detect
+    /// help under its name.
+    #[test]
+    fn walk_fires_detect_help_and_names_it() {
+        expect_fires(&["detect", "--help"], Some("detect"));
+    }
+
+    /// The short help spelling behind intervene fires the
+    /// intervene help under its name.
+    #[test]
+    fn walk_fires_intervene_help_and_names_it() {
+        expect_fires(&["intervene", "-h"], Some("intervene"));
+    }
+
+    /// An abbreviated help long fires behind a subcommand as it
+    /// fires at the root, against the subcommand's own longs.
+    #[test]
+    fn walk_fires_help_on_an_abbreviation_behind_detect() {
+        expect_fires(&["detect", "--he"], Some("detect"));
+    }
+
+    /// The shortest abbreviation fires behind intervene, whose
+    /// long set carries two value flags beside the help long
+    /// and neither of them starts with the letter h.
+    #[test]
+    fn walk_fires_help_on_the_shortest_abbreviation_behind_intervene() {
+        expect_fires(&["intervene", "--h"], Some("intervene"));
+    }
+
+    /// A valued help token behind a subcommand is refused and
+    /// carried as written, and the block it sets keeps the
+    /// help token behind it from firing.
+    #[test]
+    fn walk_refuses_help_carrying_a_value_behind_intervene() {
+        expect_run(
+            &["intervene", "--help=x", "--help"],
+            &["intervene", "--help=x", "--help"],
+        );
+    }
+
+    /// A short help token carrying a value behind detect is
+    /// refused and carried in the long form, under the same
+    /// block.
+    #[test]
+    fn walk_refuses_short_help_behind_detect_and_carries_the_long_form() {
+        expect_run(
+            &["detect", "-h=y", "--help"],
+            &["detect", "--help=y", "--help"],
+        );
+    }
+
+    /// A short token that is no help token behind a subcommand
+    /// passes as it stands and blocks nothing, so help behind
+    /// it still fires.
+    #[test]
+    fn walk_passes_a_short_no_read_token_behind_a_subcommand() {
+        expect_fires(&["detect", "-x", "--help"], Some("detect"));
+    }
+
+    /// A word value standing after its flag joins onto the
+    /// flag with an equals sign.
+    #[test]
+    fn walk_joins_a_word_value_onto_its_flag() {
+        expect_run(
+            &["detect", "--trace", "trace.json"],
+            &["detect", "--trace=trace.json"],
+        );
+    }
+
+    /// The join is made on the flag token as written, so an
+    /// abbreviated flag keeps its abbreviation in the joined
+    /// token while the canonical name serves the validation.
+    #[test]
+    fn walk_joins_a_value_onto_the_flag_as_it_was_written() {
+        expect_run(
+            &["intervene", "--scen", "loop-clears-on-nudge"],
+            &["intervene", "--scen=loop-clears-on-nudge"],
+        );
+    }
+
+    /// A lone dash reads as a positional and joins as a value.
+    #[test]
+    fn walk_joins_a_lone_dash_value() {
+        expect_run(&["detect", "--trace", "-"], &["detect", "--trace=-"]);
+    }
+
+    /// An empty token reads as a positional and joins as an
+    /// empty value.
+    #[test]
+    fn walk_joins_an_empty_value() {
+        expect_run(&["detect", "--trace", ""], &["detect", "--trace="]);
+    }
+
+    /// A subcommand word in a value position is a value like
+    /// any word, for a flag declaring no fixed set.
+    #[test]
+    fn walk_joins_a_subcommand_word_as_a_value() {
+        expect_run(
+            &["detect", "--trace", "intervene"],
+            &["detect", "--trace=intervene"],
+        );
+    }
+
+    /// After a join the walk continues, and the next value
+    /// flag in the stream takes its own value the same way.
+    #[test]
+    fn walk_continues_after_a_join_and_joins_the_next_flag() {
+        expect_run(
+            &[
+                "intervene",
+                "--scenario",
+                "loop-clears-on-nudge",
+                "--fixtures",
+                "dir",
+            ],
+            &[
+                "intervene",
+                "--scenario=loop-clears-on-nudge",
+                "--fixtures=dir",
+            ],
+        );
+    }
+
+    /// A scenario value inside the declared set joins onto
+    /// its flag.
+    #[test]
+    fn walk_joins_a_scenario_value_inside_the_set() {
+        expect_run(
+            &["intervene", "--scenario", "loop-needs-fork"],
+            &["intervene", "--scenario=loop-needs-fork"],
+        );
+    }
+
+    /// A scenario value outside the declared set is validated
+    /// as it is consumed and blocks the walk, the flag and the
+    /// value standing separate in the handed over stream.
+    #[test]
+    fn walk_blocks_on_a_scenario_value_outside_the_set() {
+        expect_run(
+            &["intervene", "--scenario", "detect"],
+            &["intervene", "--scenario", "detect"],
+        );
+    }
+
+    /// The block on a violating value is real, so a help token
+    /// behind the value does not fire.
+    #[test]
+    fn walk_blocks_on_a_scenario_value_outside_the_set_and_stays_blocked() {
+        expect_run(
+            &["intervene", "--scenario", "detect", "--help"],
+            &["intervene", "--scenario", "detect", "--help"],
+        );
+    }
+
+    /// An attached scenario value inside the set is validated
+    /// and passes, the walk staying open behind it.
+    #[test]
+    fn walk_passes_an_attached_scenario_value_inside_the_set() {
+        expect_fires(
+            &["intervene", "--scenario=loop-clears-on-nudge", "--help"],
+            Some("intervene"),
+        );
+    }
+
+    /// An attached scenario value outside the set blocks the
+    /// walk as a separate value does, and help behind it does
+    /// not fire.
+    #[test]
+    fn walk_blocks_on_an_attached_scenario_value_outside_the_set() {
+        expect_run(
+            &["intervene", "--scenario=nope", "--help"],
+            &["intervene", "--scenario=nope", "--help"],
+        );
+    }
+
+    /// The attached form resolves its flag by prefix before it
+    /// validates, so an abbreviated choices flag validates its
+    /// value against the set. The value here stands outside
+    /// the set, so the block it raises can arise only if the
+    /// abbreviated flag was resolved to the choices flag and
+    /// its value validated, and the help token behind it does
+    /// not fire.
+    #[test]
+    fn walk_validates_an_attached_value_under_an_abbreviated_flag() {
+        expect_run(
+            &["intervene", "--scen=nope", "--help"],
+            &["intervene", "--scen=nope", "--help"],
+        );
+    }
+
+    /// The attached value is read after the first equals sign,
+    /// so a value carrying a further equals sign stands
+    /// outside the set and blocks.
+    #[test]
+    fn walk_blocks_on_an_attached_value_carrying_a_further_equals() {
+        expect_run(
+            &["intervene", "--scenario=loop-clears-on-nudge=x", "--help"],
+            &["intervene", "--scenario=loop-clears-on-nudge=x", "--help"],
+        );
+    }
+
+    /// A flag token standing where a value is owed reads as
+    /// no value and blocks the walk, the pending flag standing
+    /// unjoined in the handed over stream.
+    #[test]
+    fn walk_blocks_when_a_flag_token_follows_a_pending_flag() {
+        expect_run(
+            &["detect", "--trace", "--fixtures"],
+            &["detect", "--trace", "--fixtures"],
+        );
+    }
+
+    /// The block keeps the second flag from taking a pending
+    /// of its own, so the word behind it is not joined to it.
+    #[test]
+    fn walk_blocks_and_the_second_flag_takes_no_value() {
+        expect_run(
+            &["intervene", "--scenario", "--fixtures", "dir"],
+            &["intervene", "--scenario", "--fixtures", "dir"],
+        );
+    }
+
+    /// A long help token in a value position never fires, as
+    /// PR-43 states, and blocks the walk instead.
+    #[test]
+    fn walk_blocks_on_a_long_help_token_in_a_value_position() {
+        expect_run(
+            &["intervene", "--scenario", "--help"],
+            &["intervene", "--scenario", "--help"],
+        );
+    }
+
+    /// A short help token in a value position blocks the same
+    /// way, the help family's letter keeping it from reading
+    /// as a value at all.
+    #[test]
+    fn walk_blocks_on_a_short_help_token_in_a_value_position() {
+        expect_run(
+            &["intervene", "--scenario", "-h"],
+            &["intervene", "--scenario", "-h"],
+        );
+    }
+
+    /// A separator closes the walk and is duplicated after
+    /// its recorded position in the handed over stream, so
+    /// clap refuses the copy as an unexpected argument.
+    #[test]
+    fn walk_duplicates_a_separator_behind_a_subcommand() {
+        expect_run(&["detect", "--", "x"], &["detect", "--", "--", "x"]);
+    }
+
+    /// The separator arm runs at the root the same way, and a
+    /// subcommand word after the separator is not recognized.
+    #[test]
+    fn walk_duplicates_a_separator_at_the_root() {
+        expect_run(&["--", "detect"], &["--", "--", "detect"]);
+    }
+
+    /// A help token after a separator passes through with the
+    /// rest of the stream and never fires.
+    #[test]
+    fn walk_passes_a_help_token_after_a_separator_without_firing() {
+        expect_run(
+            &["detect", "--", "--help"],
+            &["detect", "--", "--", "--help"],
+        );
+    }
+
+    /// A separator standing where a value is owed closes the
+    /// walk in the pending arm, the flag standing unjoined
+    /// and the duplication landing after the separator.
+    #[test]
+    fn walk_closes_on_a_separator_in_a_value_position() {
+        expect_run(
+            &["intervene", "--fixtures", "--", "y"],
+            &["intervene", "--fixtures", "--", "--", "y"],
+        );
+    }
+
+    /// Only the first separator records a position, so a
+    /// second one passes through and the duplication stands
+    /// once.
+    #[test]
+    fn walk_duplicates_only_the_first_separator() {
+        expect_run(&["detect", "--", "--"], &["detect", "--", "--", "--"]);
+    }
+
+    /// A separator met after a block passes through once and
+    /// is never duplicated, the walk already standing closed
+    /// in the other way.
+    #[test]
+    fn walk_carries_a_separator_after_a_block_once() {
+        expect_run(&["word", "--", "x"], &["word", "--", "x"]);
+    }
+
+    /// A help token met after a block does not fire, the whole
+    /// remainder of the stream passing through untouched.
+    #[test]
+    fn walk_does_not_fire_help_after_a_block() {
+        expect_run(&["--help=x", "--help"], &["--help=x", "--help"]);
+    }
+
+    /// The same pass through holds inside a subcommand, where
+    /// a separator after a pending arm block stands once.
+    #[test]
+    fn walk_carries_a_separator_after_a_block_inside_a_subcommand_once() {
+        expect_run(
+            &["detect", "--trace", "--fixtures", "--"],
+            &["detect", "--trace", "--fixtures", "--"],
+        );
+    }
+
+    /// An integer negative reads as a value under the matcher
+    /// and joins onto its flag.
+    #[test]
+    fn walk_joins_an_integer_negative_value() {
+        expect_run(&["detect", "--trace", "-1"], &["detect", "--trace=-1"]);
+    }
+
+    /// A dotted negative with digits on both sides of the
+    /// point reads as a value and joins.
+    #[test]
+    fn walk_joins_a_dotted_negative_value() {
+        expect_run(&["detect", "--trace", "-1.5"], &["detect", "--trace=-1.5"]);
+    }
+
+    /// The whole part of the dotted form may stand empty, so
+    /// a negative carrying only a fraction reads as a value.
+    #[test]
+    fn walk_joins_a_negative_with_an_empty_whole_part() {
+        expect_run(&["detect", "--trace", "-.5"], &["detect", "--trace=-.5"]);
+    }
+
+    /// The fraction part may not stand empty, so a negative
+    /// ending at the point reads as no value and blocks.
+    #[test]
+    fn walk_blocks_on_a_negative_with_an_empty_fraction() {
+        expect_run(&["detect", "--trace", "-1."], &["detect", "--trace", "-1."]);
+    }
+
+    /// A second point in the token ends the match, the
+    /// fraction run taking digits alone, and the token blocks.
+    #[test]
+    fn walk_blocks_on_a_negative_with_a_second_point() {
+        expect_run(
+            &["detect", "--trace", "-1.5.6"],
+            &["detect", "--trace", "-1.5.6"],
+        );
+    }
+
+    /// The pattern's end anchor forgives one trailing
+    /// newline, so a negative carrying one reads as a value.
+    #[test]
+    fn walk_joins_a_negative_with_one_trailing_newline() {
+        expect_run(&["detect", "--trace", "-1\n"], &["detect", "--trace=-1\n"]);
+    }
+
+    /// Two trailing newlines stand past the anchor's
+    /// forgiveness and the token blocks.
+    #[test]
+    fn walk_blocks_on_a_negative_with_two_trailing_newlines() {
+        expect_run(
+            &["detect", "--trace", "-1\n\n"],
+            &["detect", "--trace", "-1\n\n"],
+        );
+    }
+
+    /// The matcher's digit class is the full Unicode decimal
+    /// set, so a negative written in Arabic-Indic digits reads
+    /// as a value and joins.
+    #[test]
+    fn walk_joins_a_negative_in_unicode_decimal_digits() {
+        expect_run(&["detect", "--trace", "-١٢"], &["detect", "--trace=-١٢"]);
+    }
+
+    /// A dash token carrying a space reads as a value
+    /// whatever its prefix, here a short dash token.
+    #[test]
+    fn walk_joins_a_short_dash_value_carrying_a_space() {
+        expect_run(&["detect", "--trace", "-x y"], &["detect", "--trace=-x y"]);
+    }
+
+    /// The space rule runs ahead of the long rule as well, so
+    /// a long dash token carrying a space joins as a value.
+    #[test]
+    fn walk_joins_a_long_dash_value_carrying_a_space() {
+        expect_run(
+            &["intervene", "--fixtures", "--a b"],
+            &["intervene", "--fixtures=--a b"],
+        );
+    }
+
+    /// The one exception to the space rule stands ahead of
+    /// it, and a token of the help family carrying a space
+    /// never reads as a value and blocks in the pending arm.
+    #[test]
+    fn walk_blocks_on_a_help_family_token_carrying_a_space() {
+        expect_run(
+            &["detect", "--trace", "-h y"],
+            &["detect", "--trace", "-h y"],
+        );
+    }
+
+    /// A long token uniquely prefixing one value flag of the
+    /// subcommand is read as that flag and stands pending
+    /// under it, the join keeping the abbreviation as written.
+    #[test]
+    fn walk_reads_a_unique_flag_prefix_as_the_flag() {
+        expect_run(&["detect", "--tr", "a.json"], &["detect", "--tr=a.json"]);
+    }
+
+    /// A long token naming no value flag of the subcommand
+    /// passes as it stands and blocks nothing.
+    #[test]
+    fn walk_passes_a_long_token_naming_no_value_flag() {
+        expect_fires(&["detect", "--bogus", "--help"], Some("detect"));
+    }
+
+    /// The match runs from the flag toward the token, so a
+    /// token longer than the flag it extends matches nothing
+    /// and passes unblocked.
+    #[test]
+    fn walk_passes_a_token_longer_than_the_flag_it_extends() {
+        expect_fires(&["detect", "--tracex", "--help"], Some("detect"));
+    }
+
+    /// The degenerate attached token carries the name of two
+    /// dashes alone, and that name prefixes the one value flag
+    /// detect carries, so its attached arm runs and the token
+    /// stands unblocked as written. This pin is the check on
+    /// that reading of the census.
+    #[test]
+    fn walk_passes_the_degenerate_attached_token_behind_detect() {
+        expect_fires(&["detect", "--=x", "--help"], Some("detect"));
+    }
+
+    /// Behind intervene the same token prefixes two value
+    /// flags, so the match is not unique and it falls through
+    /// unblocked the same way.
+    #[test]
+    fn walk_passes_the_degenerate_attached_token_behind_intervene() {
+        expect_fires(&["intervene", "--=x", "--help"], Some("intervene"));
+    }
 }
