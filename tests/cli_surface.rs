@@ -33,6 +33,13 @@
 //! in the direct position, and no standing case changed its
 //! expectation or its side, so the counts below move by that
 //! one case alone.
+//!
+//! Round 12 addition. Eight oracle cases were added under
+//! PR-74, firing the fork scenario through intervene behind
+//! its states, plain and with the judgment seam's answer
+//! families on the way to the fork, and no standing case
+//! changed its expectation or its side, so the total and
+//! oracle counts below move by those eight cases alone.
 
 mod common;
 
@@ -42,8 +49,8 @@ use std::path::{Path, PathBuf};
 use common::{run_cli, temp_dir};
 use westering::pyjson::{self, Value};
 
-const EXPECTED_CASES: usize = 83;
-const EXPECTED_ORACLE_CASES: usize = 32;
+const EXPECTED_CASES: usize = 91;
+const EXPECTED_ORACLE_CASES: usize = 40;
 const EXPECTED_CLAP_CASES: usize = 51;
 
 fn string(value: &Value) -> &str {
