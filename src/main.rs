@@ -775,10 +775,14 @@ mod tests {
     }
 
     /// A help long carrying an explicit value is refused, the
-    /// token carried as written and the walk handing it to clap.
+    /// token carried as written and the walk handing it to clap,
+    /// and the block it sets keeps the help token behind it from
+    /// firing, which separates the refusal from a no reading on
+    /// this pin's own stream, the repair the Round 11 red team
+    /// named as its first Minor.
     #[test]
     fn walk_refuses_root_help_carrying_a_value() {
-        expect_run(&["--help=x"], &["--help=x"]);
+        expect_run(&["--help=x", "--help"], &["--help=x", "--help"]);
     }
 
     /// The refusal of a valued help token runs on the
