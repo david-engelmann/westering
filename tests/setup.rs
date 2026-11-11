@@ -85,7 +85,7 @@ fn readme_status_reports_rounds() {
     let counts = closed_round_counts(&status_section(&text));
     assert_eq!(
         counts,
-        vec!["12".to_string()],
+        vec!["13".to_string()],
         "README status must report exactly one closed round count"
     );
 }
