@@ -245,9 +245,9 @@ fn fixation_span_for_tool(
 /// spans that start at the same step.
 fn fixation_in_window(trace: &Trace, first: usize, last: usize) -> Vec<Value> {
     let mut positions_by_tool: BTreeMap<String, Vec<usize>> = BTreeMap::new();
-    for idx in first..=last {
+    for (idx, event) in trace.events.iter().enumerate().take(last + 1).skip(first) {
         positions_by_tool
-            .entry(trace.events[idx].tool.clone())
+            .entry(event.tool.clone())
             .or_default()
             .push(idx);
     }
