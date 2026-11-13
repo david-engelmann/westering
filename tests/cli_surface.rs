@@ -49,8 +49,8 @@ use std::path::{Path, PathBuf};
 use common::{run_cli, temp_dir};
 use westering::pyjson::{self, Value};
 
-const EXPECTED_CASES: usize = 179;
-const EXPECTED_ORACLE_CASES: usize = 125;
+const EXPECTED_CASES: usize = 185;
+const EXPECTED_ORACLE_CASES: usize = 131;
 const EXPECTED_CLAP_CASES: usize = 54;
 
 fn string(value: &Value) -> &str {
