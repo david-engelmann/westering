@@ -3,7 +3,10 @@
 
 mod common;
 
+use std::cell::RefCell;
+
 use common::{assert_py_eq, int_of, list, text_of};
+use westering::judgment::JudgmentSource;
 use westering::pyjson::Value;
 use westering::sandbox::run_session;
 
@@ -99,6 +102,60 @@ fn agent_that_ignores_every_rung_ends_stalled_with_all_recorded() {
             "sharper_prompt".to_string(),
             "smaller_subtask".to_string(),
             "fork".to_string()
+        ]
+    );
+}
+
+/// A judgment source that records the point of every call in
+/// order and abstains on all of them, so a test can read the
+/// order the harness asked in off the log it leaves behind.
+struct CallLog {
+    calls: RefCell<Vec<String>>,
+}
+
+impl JudgmentSource for CallLog {
+    fn judge(&self, point: &str, _request: &Value) -> Option<Value> {
+        self.calls.borrow_mut().push(point.to_string());
+        None
+    }
+}
+
+// The call order pin for PR-151. Inside one session step the
+// recovery of the pending record is assessed ahead of the
+// severity ask for the fresh detection. The corpus sources
+// answer by point name, so no corpus case can see the order.
+// This source answers nothing and only remembers the order it
+// was asked in. In loop-never-clears all four rungs fire in
+// turn, so the log reads severity for the opening rung, then
+// recovery ahead of severity at each later rung step, and a
+// closing recovery for the fork record once no rung stands.
+#[test]
+fn recovery_is_assessed_ahead_of_severity_inside_one_step() {
+    let log = CallLog {
+        calls: RefCell::new(Vec::new()),
+    };
+    let record = run_session("loop-never-clears", Some(&log)).expect("session runs");
+    assert_eq!(
+        rungs_of(&record),
+        vec![
+            "nudge".to_string(),
+            "sharper_prompt".to_string(),
+            "smaller_subtask".to_string(),
+            "fork".to_string()
+        ]
+    );
+    let calls = log.calls.borrow().clone();
+    assert_eq!(
+        calls,
+        vec![
+            "severity".to_string(),
+            "recovery".to_string(),
+            "severity".to_string(),
+            "recovery".to_string(),
+            "severity".to_string(),
+            "recovery".to_string(),
+            "severity".to_string(),
+            "recovery".to_string()
         ]
     );
 }
