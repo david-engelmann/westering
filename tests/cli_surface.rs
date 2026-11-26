@@ -49,9 +49,9 @@ use std::path::{Path, PathBuf};
 use common::{run_cli, temp_dir};
 use westering::pyjson::{self, Value};
 
-const EXPECTED_CASES: usize = 561;
+const EXPECTED_CASES: usize = 609;
 const EXPECTED_ORACLE_CASES: usize = 283;
-const EXPECTED_CLAP_CASES: usize = 278;
+const EXPECTED_CLAP_CASES: usize = 326;
 
 fn string(value: &Value) -> &str {
     value.as_str().expect("corpus text is a string")
